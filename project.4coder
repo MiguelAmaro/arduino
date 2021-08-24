@@ -4,6 +4,7 @@ project_name =  "Arduino";
 
 patterns = {
     "*.c",
+    "*.ino",
     "*.h",
     "*.bat",
     "*.sh",
