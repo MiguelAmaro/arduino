@@ -10,6 +10,9 @@ https://www.microchip.com/en-us/development-tools-tools-and-software/gcc-compile
 - How the IDE gets code onto the board
 http://savannah.nongnu.org/projects/avrdude
 
+- AVRDUDE - How the IDE gets code onto the board
+http://savannah.nongnu.org/projects/avrdude
+
 - Learning Bootloaders
 https://www.electronicwings.com/arduino/basics-to-developing-bootloader-for-arduino
 

@@ -2,5 +2,9 @@
 
 int main()
 {
-	return;
+    
+    while(1)
+    {
+        
+    }
 }
