@@ -1,10 +1,12 @@
 # Learning Arduino
 
 ## Resources
+-  AVR Toolchain (Compiler for 8-bit Arduion Processor)
+https://www.microchip.com/en-us/development-tools-tools-and-software/gcc-compilers-avr-and-arm
 
-### How the IDE gets code onto the board
+- How the IDE gets code onto the board
 http://savannah.nongnu.org/projects/avrdude
 
-### Learning Bootloaders
+-  Learning Bootloaders
 https://www.electronicwings.com/arduino/basics-to-developing-bootloader-for-arduino
 
