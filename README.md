@@ -12,6 +12,7 @@ http://savannah.nongnu.org/projects/avrdude
 
 - AVRDUDE - How the IDE gets code onto the board
 http://savannah.nongnu.org/projects/avrdude
+https://www.asensar.com/guide/arduino_atemlstudio/program-arduino-with-avrdude.html
 
 - Learning Bootloaders
 https://www.electronicwings.com/arduino/basics-to-developing-bootloader-for-arduino

@@ -37,11 +37,11 @@ commands =
 		.cursor_at_end    = false,
 	},
     
-    .flash =
+    .launch =
     {
-		.win              = "flash.bat",
+		.win              = "launch.bat",
 		.footer_panel     = false, 
-		.save_dirty_files = false, 
+		.save_dirty_files = true, 
 		.cursor_at_end    = false,
 	},
     
@@ -58,6 +58,6 @@ fkey_command =
 {
     .F1  = "build",
     
-    .F12 = "flash",
+    .F12 = "launch",
     .F11 = "debug",
 };
