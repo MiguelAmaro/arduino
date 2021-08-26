@@ -1,4 +1,4 @@
-/// Pg. 52
+/// Pg. 52 "Getting Started with Sensors Measure the World with Electronics, Arduino, and Raspberry Pi"
 
 /// Globals
 int heatSensorPin = A0;
