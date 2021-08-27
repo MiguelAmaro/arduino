@@ -38,3 +38,4 @@ https://eleccelerator.com/fusecalc/fusecalc.php?chip=atmega165pa&LOW=ED&HIGH=DE&
 - Other
 https://www.electrosoftcloud.com/en/changing-the-arduino-clock-speed/
 https://www.arduino.cc/en/Tutorial/BuiltInExamples/ArduinoISP
+https://www.arnabkumardas.com/arduino-tutorial/avr-system-clock/

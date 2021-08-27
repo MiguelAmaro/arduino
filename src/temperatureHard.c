@@ -29,7 +29,7 @@ FILE __stdout;  //Use with printf
 FILE __stdin ;  //use with fget/sscanf, or scanfb
 
 #define USE_ONBOARD_LED false
-#define SYSTEM_OSC_FREQUENCY 8000000UL
+#define SYSTEM_OSC_FREQUENCY 15952940UL
 
 #define LED_BUILTIN  PINB5 // (Port B PIN 5)
 
@@ -98,10 +98,14 @@ void LED_BlinkNumberBinary(u16 value, u16 data_size_in_bits)
     return;
 }
 
-#define USBS0_MASK    (1 << USBS0)
-#define RXEN0_MASK    (1 << RXEN0)
-#define TXEN0_MASK    (1 << TXEN0)
+#define USART0_USBS_MASK    (1 << USBS0)
+#define USART0_RXEN_MASK    (1 << RXEN0)
+#define USART0_TXEN_MASK    (1 << TXEN0)
+
 #define UCSZ00_SET(x) (x << UCSZ00)
+#define USART0_UCSR0C_UMSEL01_MASK (1 << UMSEL01)
+#define USART0_UCSR0C_UMSEL00_MASK (1 << UMSEL00)
+//#define XCK
 
 void
 USART0_init(u16 baud_rate)
@@ -112,20 +116,27 @@ USART0_init(u16 baud_rate)
     // TODO(MIGUEL): clear global interrupt flag
     
     // NOTE(MIGUEL): pg.146 calc buad value for desired baud rate
-    //u16 baud = (SYSTEM_OSC_FREQUENCY / (16 * baud_rate)) - 1;
-    u32 baud = ((SYSTEM_OSC_FREQUENCY / (4 * baud_rate)) - 1) / 2;
+    u16 baud = ((SYSTEM_OSC_FREQUENCY / (f32)(8.0f * (f32)baud_rate)) - 1) ;
     
     // 0000 1111    1111 1111
     UBRR0H = (u8)((baud & 0x0F00) >> 8);
     UBRR0L = (u8) (baud & 0x00FF);
     
+    //DDR_XCK0 |= (1 << XCK0);
+    
+    UCSR0A |= (1 << U2X0);
+    
     /// Enable transmitter and reciever
-    UCSR0B = RXEN0_MASK | TXEN0_MASK;
+    UCSR0B = (USART0_RXEN_MASK |
+              USART0_TXEN_MASK);
+    
+    /// Asyncronous mode
+    UCSR0C &= ~(USART0_UCSR0C_UMSEL01_MASK |
+                USART0_UCSR0C_UMSEL00_MASK);
     
     /// Sef frame format
-    UCSR0C =   UCSZ00_SET(3);
-    UCSR0C &= ~USBS0_MASK;
-    
+    UCSR0C |=   UCSZ00_SET(3);
+    UCSR0C &= ~USART0_USBS_MASK;
     return;
 }
 
@@ -133,8 +144,8 @@ void
 USART0_transmit(u8 data)
 {
     while(!(UCSR0A & (1 << UDRE0)));
-    
     UDR0 = data;
+    
     
     return;
 }
@@ -151,11 +162,14 @@ USART0_receive(void)
     return data;
 }
 
+#define USART0_DRE_MASK (1 << UDRE0)
+#define USART0_TXC_MASK (1 << TXC0)
 //Retarget the fputc method to use the USART0
 s16 
 fputc(s16 byte, FILE *f)
 {
-    USART0_transmit(byte);
+    while(!(UCSR0A & USART0_DRE_MASK) && !(UCSR0A & USART0_TXC_MASK));
+    UDR0 = 0xFF & byte;
     
     return byte;
 }
@@ -166,14 +180,23 @@ fgetc(FILE *f)
 {
     s16 data = 0;
     
-    data = USART0_receive();
+    while(!(UCSR0A & (1 << RXC0)));
+    data = UDR0;
     
-    return data & 0xFF;
+    return 0xFF & data;
 }
+
+#define ASSR_EXCLK_MASK (1 << EXCLK)
+#define ASSR_AS2_MASK   (1 << AS2)
 
 int main(void)
 {
     /// setup
+    // TODO(MIGUEL): configure Port B pin 7 to output oscillator frequency
+    //ASSR &= ~ASSR_EXCLK_MASK;
+    //ASSR |=  ASSR_AS2_MASK;
+    
+    
     // TODO(MIGUEL): configure UART for serial comm
     USART0_init(9600);
     // TODO(MIGUEL): configure ADC to read lm35
@@ -186,25 +209,16 @@ int main(void)
     while(true)
     {
         // TODO(MIGUEL): transmit status to host pc via serial comm (UART)
-        printf("blinking...");
-        u8 efuse = boot_lock_fuse_bits_get(GET_EXTENDED_FUSE_BITS);
-        u8 hfuse = boot_lock_fuse_bits_get(GET_HIGH_FUSE_BITS);
-        u8 lfuse = boot_lock_fuse_bits_get(GET_LOW_FUSE_BITS);
-        delay(64000);
-        LED_BlinkNumberBinary(lfuse, 8);
-        delay(10000);
-        LED_BlinkNumberBinary(hfuse, 8);
-        delay(10000);
-        LED_BlinkNumberBinary(efuse, 8);
-        delay(10000);
+        printf("%s", "b");
         
-        delay(64000);
-        
-        
+        /*
 #if USE_ONBOARD_LED
-        //LED_blink(LED_BUILTIN);
+        //LED_Blink(LED_BUILTIN, 1000);
 #else
-        //LED_blink(ledPin);
+        LED_Blink(ledPin, 1000);
 #endif
+    */
     }
+    
+    return 0;
 }

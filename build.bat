@@ -27,9 +27,10 @@ rem               _delay_ms() use this to create acurate delays but if F_CPU doe
 rem               match the acual processors SF the delays wont be accurate.
 set AVR_GCC_FLAGS=^
 -mmcu=atmega328p ^
--DF_CPU=8000000UL ^
+-DF_CPU=15952940 ^
+-std=gnu99 ^
 -Wall ^
--Os ^
+-O2 ^
 -o %PROJECT_NAME%.elf
 
 set AVR_LD_FLAGS=
