@@ -1,7 +1,8 @@
-#include <avr/io.h>
 #include <avr/boot.h>
+#include <avr/io.h>
 #include <stdint.h>
 #include <stdio.h>
+//#include "avr_debug.h"
 #include <util/delay.h>
 
 #define true  1
@@ -20,16 +21,28 @@ typedef int64_t  s64;
 typedef float    f32;
 typedef float    f64;
 
+
+// TODO(MIGUEL): 
+// NOTE(MIGUEL): 
+
 struct __FILE
 {
     int handle;
+};
+
+enum count
+{
+    first,
+    second,
 };
 
 FILE __stdout;  //Use with printf
 FILE __stdin ;  //use with fget/sscanf, or scanfb
 
 #define USE_ONBOARD_LED false
-#define SYSTEM_OSC_FREQUENCY 15952940UL
+// NOTE(MIGUEL): Value Measured with o-scope using Debug_ToggleIOTOMeasureSysFreq
+//#define SYSTEM_OSC_FREQUENCY 15952940UL
+#define SYSTEM_OSC_FREQUENCY 16000000UL
 
 #define LED_BUILTIN  PINB5 // (Port B PIN 5)
 
@@ -98,13 +111,16 @@ void LED_BlinkNumberBinary(u16 value, u16 data_size_in_bits)
     return;
 }
 
-#define USART0_USBS_MASK    (1 << USBS0)
-#define USART0_RXEN_MASK    (1 << RXEN0)
-#define USART0_TXEN_MASK    (1 << TXEN0)
+#define USART0_CTRLSTATC_STOPBITS_MASK (1 << USBS0)
+#define USART0_CTRLSTATB_2X_MASK        (1 <<  U2X0)
+#define USART0_CTRLSTATB_RXEN_MASK      (1 << RXEN0)
+#define USART0_CTRLSTATB_TXEN_MASK      (1 << TXEN0)
 
-#define UCSZ00_SET(x) (x << UCSZ00)
-#define USART0_UCSR0C_UMSEL01_MASK (1 << UMSEL01)
-#define USART0_UCSR0C_UMSEL00_MASK (1 << UMSEL00)
+#define USART0_CTRLSTATC_CHARSIZE0_MASK (1 << UCSZ00)
+#define USART0_CTRLSTATC_CHARSIZE1_MASK (1 << UCSZ01)
+#define USART0_CTRLSTATB_CHARSIZE2_MASK (1 << UCSZ02)
+#define USART0_CTRLSTATC_MODESEL1_MASK  (1 << UMSEL01)
+#define USART0_CTRLSTATC_MODESEL0_MASK  (1 << UMSEL00)
 //#define XCK
 
 void
@@ -116,27 +132,32 @@ USART0_init(u16 baud_rate)
     // TODO(MIGUEL): clear global interrupt flag
     
     // NOTE(MIGUEL): pg.146 calc buad value for desired baud rate
-    u16 baud = ((SYSTEM_OSC_FREQUENCY / (f32)(8.0f * (f32)baud_rate)) - 1) ;
+    u16 baud = ((SYSTEM_OSC_FREQUENCY / (f32)(16.0f * (f32)baud_rate)) - 1) ;
     
     // 0000 1111    1111 1111
     UBRR0H = (u8)((baud & 0x0F00) >> 8);
     UBRR0L = (u8) (baud & 0x00FF);
     
-    //DDR_XCK0 |= (1 << XCK0);
-    
-    UCSR0A |= (1 << U2X0);
+    /// Double async transmission speed
+    // baud divisor kept at 16.0f, not reduced to 8.0f
+    UCSR0A &= ~USART0_CTRLSTATB_2X_MASK; 
     
     /// Enable transmitter and reciever
-    UCSR0B = (USART0_RXEN_MASK |
-              USART0_TXEN_MASK);
+    UCSR0B = (USART0_CTRLSTATB_RXEN_MASK |
+              USART0_CTRLSTATB_TXEN_MASK);
     
     /// Asyncronous mode
-    UCSR0C &= ~(USART0_UCSR0C_UMSEL01_MASK |
-                USART0_UCSR0C_UMSEL00_MASK);
+    UCSR0C &= ~(USART0_CTRLSTATC_MODESEL1_MASK |
+                USART0_CTRLSTATC_MODESEL1_MASK);
     
     /// Sef frame format
-    UCSR0C |=   UCSZ00_SET(3);
-    UCSR0C &= ~USART0_USBS_MASK;
+    // 8 bit data 
+    UCSR0B &= ~USART0_CTRLSTATB_CHARSIZE2_MASK;
+    UCSR0C |= (USART0_CTRLSTATC_CHARSIZE0_MASK |
+               USART0_CTRLSTATC_CHARSIZE1_MASK);
+    // One stop bit
+    UCSR0C &= ~USART0_CTRLSTATC_STOPBITS_MASK;
+    
     return;
 }
 
@@ -162,13 +183,26 @@ USART0_receive(void)
     return data;
 }
 
+//#define Log(format, ...) print(stdout, format, __VA_ARGS__)
+void print(const char * string, u32 length)
+{
+    for(u32 curr = 0; curr < length; curr++)
+    {
+        fputc((u8)string[curr], stdout);
+    }
+    
+    return;
+}
+
 #define USART0_DRE_MASK (1 << UDRE0)
 #define USART0_TXC_MASK (1 << TXC0)
 //Retarget the fputc method to use the USART0
 s16 
 fputc(s16 byte, FILE *f)
 {
-    while(!(UCSR0A & USART0_DRE_MASK) && !(UCSR0A & USART0_TXC_MASK));
+    while(!(UCSR0A & USART0_DRE_MASK) &&
+          !(UCSR0A & USART0_TXC_MASK));
+    
     UDR0 = 0xFF & byte;
     
     return byte;
@@ -205,12 +239,20 @@ int main(void)
     DDRB |= getBitValue(LED_BUILTIN); // or (1 << PINB5) or 0x08
     DDRB |= getBitValue(ledPin);      // or (1 << PINB4) or 0x10
     
+    u8 tick = 0;
+    u8 output = 0;
     /// loop
     while(true)
     {
         // TODO(MIGUEL): transmit status to host pc via serial comm (UART)
-        printf("%s", "b");
         
+        
+        //printf("%c", output);
+        print("blinking...\r\n", sizeof("blinking...\r\n"));
+        if(output >= 255) { tick = -1; }
+        if(output <=   0) { tick =  1; }
+        
+        output += tick;
         /*
 #if USE_ONBOARD_LED
         //LED_Blink(LED_BUILTIN, 1000);

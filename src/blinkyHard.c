@@ -74,4 +74,6 @@ int main(void)
         blinkLed(ledPin);
 #endif
     }
+    
+    return 0;
 }
