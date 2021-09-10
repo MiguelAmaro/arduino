@@ -1,5 +1,18 @@
 # Learning Arduino
 
+## Hardward
+
+| Sensors     |---|---|
+| Type        | Manufacturer      | Name
+|---|---|---|
+| Temperature | Analog Devices    | tmp35gz 
+| Temperature | Texas Instruments | lm32 
+ 
+| Motors  |---|---|
+| Type        | Manufacturer  | Name
+|---|---|---|
+| DC Haptic   | china         | Xbox 360 12v
+
 ## Resources
 - Get the Arduino IDE here
 https://www.arduino.cc/en/software
