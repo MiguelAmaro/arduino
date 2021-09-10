@@ -2,9 +2,10 @@
 
 ## Hardware
 
-| Sensors     |
+| Sensors     | - |
 | - | - | - |
 | Type        | Manufacturer      | Name
+| - | - | - |
 | Temperature | Analog Devices    | tmp35gz 
 | Temperature | Texas Instruments | lm32 
  
