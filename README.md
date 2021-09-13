@@ -14,11 +14,20 @@
 | DC Haptic   | china         | Xbox 360 12v
 
 ## Resources
+
+Development Tools
 - Get the Arduino IDE here
 https://www.arduino.cc/en/software
 
 - AVR Toolchain (Compiler for 8-bit Arduion Processor)
 https://www.microchip.com/en-us/development-tools-tools-and-software/gcc-compilers-avr-and-arm
+
+- AVR GodBolt - See the assembly ouput of you AVR C code
+https://godbolt.org/z/earxavM9K
+
+- Draw Circuit diagrams easily
+https://www.circuitlab.com
+
 - Retargeting IO for UART communication with host dev pc
 // TODO(MIGUEL): add url
 
@@ -31,6 +40,7 @@ https://www.asensar.com/guide/arduino_atemlstudio/program-arduino-with-avrdude.h
 
 - Learning Bootloaders
 https://www.electronicwings.com/arduino/basics-to-developing-bootloader-for-arduino
+
 
 - Measuring system clock frequency
 https://www.avrfreaks.net/forum/trying-see-clock-signal-oscilliscope?page=all
