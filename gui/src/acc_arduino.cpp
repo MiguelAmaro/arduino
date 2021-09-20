@@ -3,34 +3,16 @@
 #define WIN32_LEAN_AND_MEAN
 #include "stdafx.h"
 #include <windows.h>
-//#include <iostream>
 #include "shared_file_out.h"
 #include <stdint.h>
+
+#include "acc_arduino_types.h"
+#include "acc_arduino_math.h"
 
 #define KILOBYTES(size) (         (size) * 1024LL)
 #define MEGABYTES(size) (KILOBYTES(size) * 1024LL)
 #define GIGABYTES(size) (MEGABYTES(size) * 1024LL)
 #define TERABYTES(size) (GIGABYTES(size) * 1024LL)
-
-typedef size_t memory_index;
-
-typedef uint8_t  u8 ;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-typedef  int8_t  s8 ;
-typedef  int16_t s16;
-typedef  int32_t s32;
-typedef  int64_t s64;
-
-typedef  int8_t  b8 ;
-typedef  int16_t b16;
-typedef  int32_t b32;
-typedef  int64_t b64;
-
-typedef float f32;
-typedef float f64;
 
 
 #define ASSERT(expression) if(!(expression)){ *(u32 *)0x00 = 0; }
@@ -60,26 +42,6 @@ struct draw_buffer
     uint32_t   Pitch;
     uint32_t   BytesPerPixel;
 };
-
-union v4
-{
-    struct
-    {
-        f32 x;
-        f32 y;
-        f32 z;
-        f32 w;
-    };
-    struct
-    {
-        f32 r;
-        f32 g;
-        f32 b;
-        f32 a;
-    };
-    f32 e[4];
-};
-
 
 struct bitmap
 {
@@ -227,7 +189,7 @@ LoadGlyphBitmap(const char *FileName, const char *FontName, u32 CodePoint)
 }
 
 
-void Draw(draw_buffer *Buffer, v4 color)
+void FillBitmap(draw_buffer *Buffer, v4 color)
 {
     u32 *Pixel = (u32 *)Buffer->Data;
     
@@ -247,18 +209,30 @@ void Draw(draw_buffer *Buffer, v4 color)
     return;
 }
 
+void DrawFilledRect(draw_buffer *Buffer, rect_v2 window, f32 outline)
+{
+    
+    return;
+}
+
+void DrawUnfilledRect(draw_buffer *Buffer, rect_v2 bounds)
+{
+    
+    return;
+}
 
 void DrawBitmap(draw_buffer *Buffer, bitmap *Bitmap)
 {
     u8 *Source = (u8 *)Bitmap->Data;
     u8 *Dest   = (u8 *)Buffer->Data;
     
+    u32 *SourceLine = (u32 *)(Source + (Bitmap->Pitch * (Bitmap->Height - 1)));
+    u32 *DestLine   = (u32 *)(Dest);
+    
     for(u32 Y = 0; Y < Bitmap->Height; Y++)
     {
-        u32 *SourceLine = (u32 *)(Source + (Bitmap->Pitch * Y));
         u32 *SourcePixel = SourceLine;
-        u32 *DestLine      = (u32 *)(Dest + (Buffer->Pitch * Y));
-        u32 *DestPixel = DestLine;
+        u32 *DestPixel   = DestLine;
         
         for(u32 X = 0; X < Bitmap->Width; X++)
         {
@@ -283,6 +257,9 @@ void DrawBitmap(draw_buffer *Buffer, bitmap *Bitmap)
             DestPixel++;
             SourcePixel++;
         }
+        
+        DestLine   += Buffer->Width;
+        SourceLine -= Bitmap->Width;
     }
     
     return;
@@ -1000,26 +977,11 @@ void WinMainCRTStartup()
         u8 ShittyBuffer[256];
         SerialPortRecieveData(&Arduino, ShittyBuffer, sizeof(ShittyBuffer));
         
-        u32 TestBitmapData[64 * 64];
+        FillBitmap(&g_DrawBuffer, gray);
+        DrawBitmap(&g_DrawBuffer, &LowerAlphaGlyph['m' - 'a']);
+        DrawBitmap(&g_DrawBuffer, &LowerAlphaGlyph['a' - 'a']);
+        DrawBitmap(&g_DrawBuffer, &LowerAlphaGlyph['x' - 'a']);
         
-        u32 *Pixel = TestBitmapData;
-        for(u32 Y = 0; Y < 64; Y++)
-        {
-            for(u32 X = 0; X < 64; X++)
-            {
-                *Pixel++ = 0xFFFF00FF;
-            }
-        }
-        
-        bitmap TestBitmap;
-        TestBitmap.Width  = 64;
-        TestBitmap.Height = 64;
-        TestBitmap.Pitch  = TestBitmap.Width * sizeof(u32);
-        TestBitmap.Data   = TestBitmapData;
-        
-        Draw(&g_DrawBuffer, gray);
-        DrawBitmap(&g_DrawBuffer, &UpperAlphaGlyph[1]);
-        //DrawBitmap(&g_DrawBuffer, &TestBitmap);
         HDC DeviceContext = GetDC(Window);
         Display(&g_DrawBuffer, DeviceContext);
     }
