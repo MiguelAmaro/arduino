@@ -525,7 +525,7 @@ SerialDeviceInit(serial_device *SerialDevice,
                                           NULL);
     
     
-    if(SerialDevice->CommHandle)
+    if(SerialDevice->CommHandle != INVALID_HANDLE_VALUE)
     {
         DCB SerialDeviceParams       = { 0 };
         SerialDeviceParams.DCBlength = sizeof(SerialDeviceParams);
@@ -567,7 +567,7 @@ SerialPortTransmitData(serial_device *SerialDevice, u8 *Data, u32 Size)
     b32   Result       = 0;
     DWORD BytesWritten = 0;
     
-    if(SerialDevice->CommHandle)
+    if(SerialDevice->CommHandle != INVALID_HANDLE_VALUE)
     {
         Result = WriteFile(SerialDevice->CommHandle,
                            Data,
@@ -576,7 +576,7 @@ SerialPortTransmitData(serial_device *SerialDevice, u8 *Data, u32 Size)
                            0);
     }
     
-    ASSERT(Result);
+    //ASSERT(Result1);
     
     return;
 }
@@ -592,7 +592,7 @@ SerialPortRecieveData(serial_device *SerialDevice,
     DWORD BytesToRead = PayloadSize;
     DWORD BytesRead   = 0;
     
-    if(SerialDevice->CommHandle)
+    if(SerialDevice->CommHandle != INVALID_HANDLE_VALUE)
     {
 #if 1
         u8 Data;
@@ -604,7 +604,7 @@ SerialPortRecieveData(serial_device *SerialDevice,
                               &BytesRead,
                               0);
             
-            ASSERT(Result);
+            //ASSERT(Result);
             
             BytesToRead -= BytesRead;
             
