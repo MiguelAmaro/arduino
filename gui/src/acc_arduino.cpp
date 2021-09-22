@@ -444,51 +444,26 @@ void Dismiss(SMElement element)
 }
 
 
-#if 0
-void print(string name, float value)
+void Print(const char *String, u32 Length, bitmap *Glyphs, draw_buffer *Buffer)
 {
-	//wcout << name.c_str() << " : " << value << endl;
+    bitmap *UpperAlphaGlyph = Glyphs;
+    bitmap *LowerAlphaGlyph = UpperAlphaGlyph + 26;
+    bitmap *NumericGlyph    = LowerAlphaGlyph + 26;
     
-}
-
-inline void
-Print(const string name, char data)
-{
-	/*wcout << name.c_str() << " : ";
-    
-    for (int i = 0; i < S; i++)
+	for(u32 StringIndex = 0; StringIndex < Length; StringIndex++)
     {
-        wcout << v[i];
-        if (i < S - 1)
-        {
-            wcout << " , ";
-        }
+        u8 Char = String[StringIndex];
         
+        bitmap *GlyphBitmap = 
+            ((Char >= 'A') && (Char <= 'Z'))? UpperAlphaGlyph + (Char - 'A'):
+        ((Char >= 'a') && (Char <= 'z'))? LowerAlphaGlyph + (Char - 'a'):
+        ((Char >= '0') && (Char <= '9'))? NumericGlyph    + (Char - '0'): 0;
+        
+        DrawBitmap(Buffer, GlyphBitmap);
     }
-	wcout << endl;*/
-}
-
-inline void Print2(const char name, int data)
-{
-    /*wcout << name.c_str() << " : ";
     
-    for (int i = 0; i < S; i++)
-    {
-        wcout << i << " : ";
-        for (int j = 0; j < S2; j++) {
-            wcout << v[i][j];
-            if (j < S2 - 1)
-            {
-                wcout << " , ";
-            }
-        }
-        
-        wcout << ";" << endl;
-        
-    }
-    */
+    return;
 }
-#endif
 
 // NOTE(MIGUEL): Should This code go in the windows platfom layer?? and i just keep abastractions and generics here
 
@@ -864,9 +839,10 @@ void WinMainCRTStartup()
     serial_device Arduino = { 0 };
     SerialDeviceInit(&Arduino, "\\\\.\\COM5", 9600, 8);
     
-    bitmap UpperAlphaGlyph[26];
-    bitmap LowerAlphaGlyph[26];
-    bitmap NumericGlyph[10];
+    bitmap Glyphs[26 * 26 * 10];
+    bitmap *UpperAlphaGlyph = Glyphs;
+    bitmap *LowerAlphaGlyph = UpperAlphaGlyph + 26;
+    bitmap *NumericGlyph    = LowerAlphaGlyph + 26;
     
     for(u8 alpha = 'a'; alpha < 'z'; alpha++)
     {
@@ -880,18 +856,32 @@ void WinMainCRTStartup()
     {
         NumericGlyph[numeric - '0'] = LoadGlyphBitmap("C:\\Windows\\Fonts\\Ariel.ttf", "Ariel", numeric);
     }
+    
+    b32 KeyStates[3];
+    
 	while (g_Running)
 	{
         ProcessPendingMessages();
         
-        SPageFilePhysics* physics  = (SPageFilePhysics*)m_physics.mapFileBuffer;
-        SPageFileGraphic* graphics = (SPageFileGraphic*)m_graphics.mapFileBuffer;
-        SPageFileStatic*  statics  = (SPageFileStatic*)m_static.mapFileBuffer;
+        /// INPUT
+        SPageFilePhysics* physics  = (SPageFilePhysics *)m_physics.mapFileBuffer;
+        SPageFileGraphic* graphics = (SPageFileGraphic *)m_graphics.mapFileBuffer;
+        SPageFileStatic*  statics  = (SPageFileStatic  *)m_static.mapFileBuffer;
+        
+        KeyStates[0] = GetAsyncKeyState(0x31);
+        KeyStates[1] = GetAsyncKeyState(0x32);
+        KeyStates[2] = GetAsyncKeyState(0x33);
+        
+        /// RENDER
+        v4 gray = {0.3f, 0.3f, 0.3f, 1.0f};
+        FillBitmap(&g_DrawBuffer, gray);
+        
+        Print("Testing", sizeof("Testing") - 1, Glyphs, &g_DrawBuffer);
 #if 0
-		if (GetAsyncKeyState(0x31) != 0) // user pressed 1
+		if (KeyState[0]) // user pressed 1
 		{
 			//wcout << "---------------PHYSICS INFO---------------" << endl;
-			Print("acc G", pf->accG);
+            Print("acc G", pf->accG);
 			Print("brake", pf->brake);
 			Print("camber rad", pf->camberRAD);
 			Print("damage", pf->carDamage);
@@ -908,9 +898,9 @@ void WinMainCRTStartup()
 			Print("roll", pf->roll);
 			Print("rpms", pf->rpms);
 			Print("speed kmh", pf->speedKmh);
-            Print2("contact point", pf->tyreContactPoint);
-            Print2("contact normal", pf->tyreContactNormal);
-            Print2("contact heading", pf->tyreContactHeading);
+            //Print2("contact point", pf->tyreContactPoint);
+            //Print2("contact normal", pf->tyreContactNormal);
+            //Print2("contact heading", pf->tyreContactHeading);
 			Print("steer ", pf->steerAngle);
 			Print("suspension travel", pf->suspensionTravel);
 			Print("tyre core temp", pf->tyreCoreTemperature);
@@ -923,7 +913,7 @@ void WinMainCRTStartup()
 			Print("wheel pressure", pf->wheelsPressure);
 		}
         
-		if (GetAsyncKeyState(0x32) != 0) // user pressed 2
+		if (KeyState[1]) // user pressed 2
 		{
 			//wcout << "---------------GRAPHICS INFO---------------" << endl;
 			Print("packetID ", pf->packetId);
@@ -946,41 +936,35 @@ void WinMainCRTStartup()
 			//wcout << "TYRE COMPOUND : " << pf->tyreCompound << endl;
 			Print("replayMult", pf->replayTimeMultiplier);
 			Print("normalizedCarPosition", pf->normalizedCarPosition);
-			Print2("carCoordinates", pf->carCoordinates);
+			//Print2("carCoordinates", pf->carCoordinates);
 		}
         
         
-		if (GetAsyncKeyState(0x33) != 0) // user pressed 3
+		if (KeyState[2]) // user pressed 3
 		{
 			//wcout << "---------------STATIC INFO---------------" << endl;
 			//wcout << "SM VERSION " << pf->smVersion << endl;
 			//wcout << "AC VERSION " << pf->acVersion << endl;
             
-			printData("number of sessions ", pf->numberOfSessions);
-			printData("numCars", pf->numCars);
+			Print("number of sessions ", pf->numberOfSessions);
+			Print("numCars", pf->numCars);
 			//wcout << "Car model " << pf->carModel << endl;
 			//wcout << "Car track " << pf->track << endl;
 			//wcout << "Player Name " << pf->playerName << endl;
-			printData("sectorCount", pf->sectorCount);
+			Print("sectorCount", pf->sectorCount);
             
-			printData("maxTorque", pf->maxTorque);
-			printData("maxPower", pf->maxPower);
-			printData("maxRpm", pf->maxRpm);
-			printData("maxFuel", pf->maxFuel);
-			printData("suspensionMaxTravel", pf->suspensionMaxTravel);
-			printData("tyreRadius", pf->tyreRadius);
+			Print("maxTorque", pf->maxTorque);
+			Print("maxPower", pf->maxPower);
+			Print("maxRpm", pf->maxRpm);
+			Print("maxFuel", pf->maxFuel);
+			Print("suspensionMaxTravel", pf->suspensionMaxTravel);
+			Print("tyreRadius", pf->tyreRadius);
             
 		}
 #endif
-        v4 gray = {0.3f, 0.3f, 0.3f, 1.0f};
         
         u8 ShittyBuffer[256];
         SerialPortRecieveData(&Arduino, ShittyBuffer, sizeof(ShittyBuffer));
-        
-        FillBitmap(&g_DrawBuffer, gray);
-        DrawBitmap(&g_DrawBuffer, &LowerAlphaGlyph['m' - 'a']);
-        DrawBitmap(&g_DrawBuffer, &LowerAlphaGlyph['a' - 'a']);
-        DrawBitmap(&g_DrawBuffer, &LowerAlphaGlyph['x' - 'a']);
         
         HDC DeviceContext = GetDC(Window);
         Display(&g_DrawBuffer, DeviceContext);
