@@ -3,7 +3,7 @@
 #ifndef ACC_ARDUINO_MATH_H
 #define ACC_ARDUINO_MATH_H
 
-union v2
+union v2f32
 {
     struct
     {
@@ -13,7 +13,17 @@ union v2
     f32 e[2];
 };
 
-union v4
+union v2s32
+{
+    struct
+    {
+        s32 x;
+        s32 y;
+    };
+    s32 e[2];
+};
+
+union v4f32
 {
     struct
     {
@@ -32,14 +42,24 @@ union v4
     f32 e[4];
 };
 
-union rect_v2
+union rect_v2f32
 {
     struct
     {
-        v2 min;
-        v2 max;
+        v2f32 min;
+        v2f32 max;
     };
     f32 e[2];
+};
+
+union rect_v2s32
+{
+    struct
+    {
+        v2s32 min;
+        v2s32 max;
+    };
+    s32 e[4];
 };
 
 

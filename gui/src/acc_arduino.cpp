@@ -69,7 +69,7 @@ LoadGlyphBitmap(const char *FileName, const char *FontName, u32 CodePoint)
         
         HFONT Font = CreateFontA(Height, 0, 0, 0,
                                  FW_NORMAL, // NOTE(casey): Weight
-                                 FALSE, // NOTE(casey): Italic
+                                 TRUE, // NOTE(casey): Italic
                                  FALSE, // NOTE(casey): Underline
                                  FALSE, // NOTE(casey): Strikeout
                                  DEFAULT_CHARSET, 
@@ -189,7 +189,7 @@ LoadGlyphBitmap(const char *FileName, const char *FontName, u32 CodePoint)
 }
 
 
-void FillBitmap(draw_buffer *Buffer, v4 color)
+void FillBitmap(draw_buffer *Buffer, v4f32 color)
 {
     u32 *Pixel = (u32 *)Buffer->Data;
     
@@ -209,32 +209,74 @@ void FillBitmap(draw_buffer *Buffer, v4 color)
     return;
 }
 
-void DrawFilledRect(draw_buffer *Buffer, rect_v2 window, f32 outline)
+void DrawFilledRect(draw_buffer *Buffer, rect_v2f32 window, f32 outline)
 {
     
     return;
 }
 
-void DrawUnfilledRect(draw_buffer *Buffer, rect_v2 bounds)
+void DrawUnfilledRect(draw_buffer *Buffer, rect_v2f32 bounds)
 {
     
     return;
 }
 
-void DrawBitmap(draw_buffer *Buffer, bitmap *Bitmap)
+void DrawBitmap(draw_buffer *Buffer, bitmap *Bitmap, v2s32 Pos)
 {
+    /// Clipping
+    rect_v2s32 DrawArea = { 0 };
+    DrawArea.min.x = Pos.x;
+    DrawArea.min.y = Pos.y;
+    DrawArea.max.x = Pos.x + Bitmap->Width;
+    DrawArea.max.y = Pos.y + Bitmap->Height;
+    
+    if(DrawArea.min.x < 0)
+    {
+        DrawArea.min.x = 0;
+    }
+    if(DrawArea.min.y < 0)
+    {
+        DrawArea.min.y = 0;
+    }
+    if(DrawArea.min.x > Buffer->Width)
+    {
+        DrawArea.min.x = Buffer->Width;
+    }
+    if(DrawArea.min.y > Buffer->Height)
+    {
+        DrawArea.min.y = Buffer->Height;
+    }
+    
+    
+    if(DrawArea.max.x < 0)
+    {
+        DrawArea.max.x = 0;
+    }
+    if(DrawArea.max.y < 0)
+    {
+        DrawArea.max.y = 0;
+    }
+    if(DrawArea.max.x > Buffer->Width)
+    {
+        DrawArea.max.x = Buffer->Width;
+    }
+    if(DrawArea.max.y > Buffer->Height)
+    {
+        DrawArea.max.y = Buffer->Height;
+    }
+    
     u8 *Source = (u8 *)Bitmap->Data;
     u8 *Dest   = (u8 *)Buffer->Data;
     
     u32 *SourceLine = (u32 *)(Source + (Bitmap->Pitch * (Bitmap->Height - 1)));
-    u32 *DestLine   = (u32 *)(Dest);
+    u32 *DestLine   = (u32 *)(Dest   + (DrawArea.min.y * Buffer->Pitch));
     
-    for(u32 Y = 0; Y < Bitmap->Height; Y++)
+    for(u32 Y = DrawArea.min.y; Y < DrawArea.max.y; Y++)
     {
         u32 *SourcePixel = SourceLine;
-        u32 *DestPixel   = DestLine;
+        u32 *DestPixel   = DestLine + DrawArea.min.x;
         
-        for(u32 X = 0; X < Bitmap->Width; X++)
+        for(u32 X = DrawArea.min.x; X < DrawArea.max.x; X++)
         {
             f32 sa = (f32)((*SourcePixel >> 24) & 0xff) / 255.0f;
             f32 sr = (f32)((*SourcePixel >> 16) & 0xff);
@@ -444,22 +486,34 @@ void Dismiss(SMElement element)
 }
 
 
-void Print(const char *String, u32 Length, bitmap *Glyphs, draw_buffer *Buffer)
+void Print(u8 *String, u32 Length, bitmap *Glyphs, draw_buffer *Buffer)
 {
+    u32 NullBitmapData[4 * 4] = { 0xFFFF0000 };
+    bitmap NullBitmap = { 0 };
+    NullBitmap.Width  = 4;
+    NullBitmap.Height = 4;
+    NullBitmap.Pitch  = NullBitmap.Width * sizeof(NullBitmapData[0]);
+    NullBitmap.Data        = NullBitmapData;
+    NullBitmap.FreedMemory = NullBitmapData;
+    
     bitmap *UpperAlphaGlyph = Glyphs;
     bitmap *LowerAlphaGlyph = UpperAlphaGlyph + 26;
     bitmap *NumericGlyph    = LowerAlphaGlyph + 26;
     
-	for(u32 StringIndex = 0; StringIndex < Length; StringIndex++)
+    v2s32 Pos = {0 , 0};
+    
+    for(u32 StringIndex = 0; StringIndex < Length; StringIndex++)
     {
         u8 Char = String[StringIndex];
         
         bitmap *GlyphBitmap = 
             ((Char >= 'A') && (Char <= 'Z'))? UpperAlphaGlyph + (Char - 'A'):
         ((Char >= 'a') && (Char <= 'z'))? LowerAlphaGlyph + (Char - 'a'):
-        ((Char >= '0') && (Char <= '9'))? NumericGlyph    + (Char - '0'): 0;
+        ((Char >= '0') && (Char <= '9'))? NumericGlyph    + (Char - '0'):
+        &NullBitmap;
         
-        DrawBitmap(Buffer, GlyphBitmap);
+        Pos.x = StringIndex * 67;
+        DrawBitmap(Buffer, GlyphBitmap, Pos);
     }
     
     return;
@@ -839,6 +893,7 @@ void WinMainCRTStartup()
     serial_device Arduino = { 0 };
     SerialDeviceInit(&Arduino, "\\\\.\\COM5", 9600, 8);
     
+    // TODO(MIGUEL): Implement a simple asset system for this shit
     bitmap Glyphs[26 * 26 * 10];
     bitmap *UpperAlphaGlyph = Glyphs;
     bitmap *LowerAlphaGlyph = UpperAlphaGlyph + 26;
@@ -872,13 +927,19 @@ void WinMainCRTStartup()
         KeyStates[1] = GetAsyncKeyState(0x32);
         KeyStates[2] = GetAsyncKeyState(0x33);
         
+        u8 ShittyBuffer[256];
+        SerialPortRecieveData(&Arduino, ShittyBuffer, sizeof(ShittyBuffer));
+        
         /// RENDER
-        v4 gray = {0.3f, 0.3f, 0.3f, 1.0f};
+        v4f32 gray = {0.3f, 0.3f, 0.3f, 1.0f};
         FillBitmap(&g_DrawBuffer, gray);
         
-        Print("Testing", sizeof("Testing") - 1, Glyphs, &g_DrawBuffer);
+        Print(ShittyBuffer, sizeof(ShittyBuffer), Glyphs, &g_DrawBuffer);
+        Print((u8 *)"acc G", sizeof("acc G"), Glyphs, &g_DrawBuffer);
+        
+        
 #if 0
-		if (KeyState[0]) // user pressed 1
+		if (KeyStates[0]) // user pressed 1
 		{
 			//wcout << "---------------PHYSICS INFO---------------" << endl;
             Print("acc G", pf->accG);
@@ -913,7 +974,7 @@ void WinMainCRTStartup()
 			Print("wheel pressure", pf->wheelsPressure);
 		}
         
-		if (KeyState[1]) // user pressed 2
+		if (KeyStates[1]) // user pressed 2
 		{
 			//wcout << "---------------GRAPHICS INFO---------------" << endl;
 			Print("packetID ", pf->packetId);
@@ -940,7 +1001,7 @@ void WinMainCRTStartup()
 		}
         
         
-		if (KeyState[2]) // user pressed 3
+		if (KeyStates[2]) // user pressed 3
 		{
 			//wcout << "---------------STATIC INFO---------------" << endl;
 			//wcout << "SM VERSION " << pf->smVersion << endl;
@@ -962,9 +1023,6 @@ void WinMainCRTStartup()
             
 		}
 #endif
-        
-        u8 ShittyBuffer[256];
-        SerialPortRecieveData(&Arduino, ShittyBuffer, sizeof(ShittyBuffer));
         
         HDC DeviceContext = GetDC(Window);
         Display(&g_DrawBuffer, DeviceContext);
