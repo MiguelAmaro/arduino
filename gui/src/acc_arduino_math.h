@@ -3,6 +3,19 @@
 #ifndef ACC_ARDUINO_MATH_H
 #define ACC_ARDUINO_MATH_H
 
+union mat2f32
+{
+    f32 e[4];
+};
+//
+//internal void
+//mat2f32_Scale(mat2f32)
+//{
+//
+//return;
+//}
+//
+
 union v2f32
 {
     struct
@@ -21,6 +34,23 @@ union v2s32
         s32 y;
     };
     s32 e[2];
+};
+
+union v3f32
+{
+    struct
+    {
+        f32 x;
+        f32 y;
+        f32 z;
+    };
+    struct
+    {
+        f32 r;
+        f32 g;
+        f32 b;
+    };
+    f32 e[3];
 };
 
 union v4f32

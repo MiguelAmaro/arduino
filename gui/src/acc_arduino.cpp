@@ -8,19 +8,14 @@
 
 #include "acc_arduino_types.h"
 #include "acc_arduino_math.h"
+#include "acc_arduino_draw.h"
+#include "acc_arduino_memory.h"
 
 #define KILOBYTES(size) (         (size) * 1024LL)
 #define MEGABYTES(size) (KILOBYTES(size) * 1024LL)
 #define GIGABYTES(size) (MEGABYTES(size) * 1024LL)
 #define TERABYTES(size) (GIGABYTES(size) * 1024LL)
 
-
-#define ASSERT(expression) if(!(expression)){ *(u32 *)0x00 = 0; }
-//#if SLOW
-//#else
-//#define ASSERT(expression)
-//#endif
-//
 
 struct SMElement
 {
@@ -32,16 +27,6 @@ SMElement m_graphics;
 SMElement m_physics;
 SMElement m_static;
 
-
-struct draw_buffer
-{
-    void      *Data;
-    BITMAPINFO Info;
-    uint32_t   Width;
-    uint32_t   Height;
-    uint32_t   Pitch;
-    uint32_t   BytesPerPixel;
-};
 
 struct bitmap
 {
@@ -189,39 +174,8 @@ LoadGlyphBitmap(const char *FileName, const char *FontName, u32 CodePoint)
 }
 
 
-void FillBitmap(draw_buffer *Buffer, v4f32 color)
-{
-    u32 *Pixel = (u32 *)Buffer->Data;
-    
-    for(u32 Y = 0; Y < Buffer->Height; Y++)
-    {
-        for(u32 X = 0; X < Buffer->Width; X++)
-        {
-            *Pixel = (((u8)(255.0f * color.a)  << 24) |
-                      ((u8)(255.0f * color.r)  << 16) |
-                      ((u8)(255.0f * color.g)  <<  8) |
-                      ((u8)(255.0f * color.b)  <<  0));
-            
-            Pixel++;
-        }
-    }
-    
-    return;
-}
-
-void DrawFilledRect(draw_buffer *Buffer, rect_v2f32 window, f32 outline)
-{
-    
-    return;
-}
-
-void DrawUnfilledRect(draw_buffer *Buffer, rect_v2f32 bounds)
-{
-    
-    return;
-}
-
-void DrawBitmap(draw_buffer *Buffer, bitmap *Bitmap, v2s32 Pos)
+void
+DrawBitmap(draw_buffer *Buffer, bitmap *Bitmap, v2s32 Pos)
 {
     /// Clipping
     rect_v2s32 DrawArea = { 0 };
@@ -307,6 +261,42 @@ void DrawBitmap(draw_buffer *Buffer, bitmap *Bitmap, v2s32 Pos)
     return;
 }
 
+
+void Print(u8 *String, u32 Length, bitmap *Glyphs, draw_buffer *Buffer)
+{
+    u32 NullBitmapData[4 * 4] = { 0xFFFF0000 };
+    bitmap NullBitmap = { 0 };
+    NullBitmap.Width  = 4;
+    NullBitmap.Height = 4;
+    NullBitmap.Pitch  = NullBitmap.Width * sizeof(NullBitmapData[0]);
+    NullBitmap.Data        = NullBitmapData;
+    NullBitmap.FreedMemory = NullBitmapData;
+    
+    bitmap *UpperAlphaGlyph = Glyphs;
+    bitmap *LowerAlphaGlyph = UpperAlphaGlyph + 26;
+    bitmap *NumericGlyph    = LowerAlphaGlyph + 26;
+    
+    v2s32 Pos = {0 , 0};
+    
+    for(u32 StringIndex = 0; StringIndex < Length; StringIndex++)
+    {
+        u8 Char = String[StringIndex];
+        
+        bitmap *GlyphBitmap = 
+            ((Char >= 'A') && (Char <= 'Z'))? UpperAlphaGlyph + (Char - 'A'):
+        ((Char >= 'a') && (Char <= 'z'))? LowerAlphaGlyph + (Char - 'a'):
+        ((Char >= '0') && (Char <= '9'))? NumericGlyph    + (Char - '0'):
+        &NullBitmap;
+        
+        Pos.x = StringIndex * 67;
+        DrawBitmap(Buffer, GlyphBitmap, Pos);
+    }
+    
+    return;
+}
+
+
+
 void Display(draw_buffer *Buffer,
              HDC          DeviceContext)
 {
@@ -323,6 +313,121 @@ void Display(draw_buffer *Buffer,
     
     return;
 }
+
+
+void
+DrawGraph(draw_buffer *Buffer,
+          bitmap *Glyphs,
+          v2s32 Size,
+          v2s32 Pos,
+          v3f32 *SampleBuffer,
+          u32    SampleCount,
+          u32    SampleHead,
+          v2s32 RangeX,
+          v2s32 RangeY,
+          u32 GridResolutionX,
+          u32 GridResolutionY,
+          u32 GridLineThickness,
+          u32 UnitInPixels)
+{
+    /// PALLETTE
+    v4f32 Blue   = {0.0f, 0.0f, 1.0f, 1.0f};
+    v4f32 Red    = {1.0f, 0.0f, 0.0f, 1.0f};
+    v4f32 Yellow = {1.0f, 1.0f, 0.0f, 1.0f};
+    v4f32 Cyan   = {0.0f, 1.0f, 1.0f, 1.0f};
+    v4f32 Green  = {0.0f, 1.0f, 0.0f, 1.0f};
+    v4f32 GridLineGray = {0.4f, 0.4f, 0.4f, 1.0f};
+    
+    
+    Print((u8 *)"Current Velocity", sizeof("velocity"), Glyphs, Buffer);
+    
+    
+    v2s32 StartDrawPos =
+    {
+        Pos.x - (Size.x / 2),
+        Pos.y
+    };
+    
+    /// GRID DRAW
+    u32 GW = (GridResolutionX * GridLineThickness);
+    u32 GH = (GridResolutionY * GridLineThickness);
+    
+    ASSERT((GridResolutionX * GridLineThickness) <= Size.x);
+    ASSERT((GridResolutionY * GridLineThickness) <= Size.y);
+    
+    u32 NumPixelsForGridSpacingX = Size.x - GW;
+    u32 NumPixelsForGridSpacingY = Size.y - GH;
+    
+    u32 GridSpacingX = NumPixelsForGridSpacingX / GridResolutionX;
+    u32 GridSpacingY = NumPixelsForGridSpacingY / GridResolutionY;
+    
+    u32 SpaceBudgetX = NumPixelsForGridSpacingX;
+    for(u32 GridLineIndex = 0; SpaceBudgetX > 0; SpaceBudgetX -= GridSpacingX, GridLineIndex++)
+    {
+        v2s32 GridLinePos;
+        GridLinePos.x = StartDrawPos.x + ((GridLineIndex + 1) * GridSpacingX); 
+        GridLinePos.y = Pos.y; 
+        v2s32 GridLineSize;
+        GridLineSize.x = GridLineThickness; 
+        GridLineSize.y = Size.y; 
+        
+        DrawFilledRect(Buffer, GridLinePos, GridLineSize, GridLineGray);
+    }
+    u32 SpaceBudgetY = NumPixelsForGridSpacingY;
+    for(u32 GridLineIndex = 0; SpaceBudgetY > 0; SpaceBudgetY -= GridSpacingY, GridLineIndex++)
+    {
+        v2s32 GridLinePos;
+        GridLinePos.x = Pos.x; 
+        GridLinePos.y = StartDrawPos.y + ((GridLineIndex + 1) * GridSpacingY); 
+        v2s32 GridLineSize;
+        GridLineSize.x = Size.x; 
+        GridLineSize.y = GridLineThickness; 
+        
+        DrawFilledRect(Buffer, GridLinePos, GridLineSize, GridLineGray);
+    }
+    
+    
+    ASSERT((SampleCount * 2) < Size.x);
+    u32 SampleSpacing = Size.x / SampleCount;
+    /// SAMPLE DRAW
+    for(u32 SampleIndex = 0; SampleIndex < SampleCount; SampleIndex++)
+    {
+        u32 RollingIndex = (SampleHead + SampleIndex) % SampleCount;
+        
+        v3f32 Sample = SampleBuffer[RollingIndex];
+        
+        v2s32 SamplePos;
+        v2s32 SampleSize;
+        
+        SamplePos.x = StartDrawPos.x + (SampleSpacing * SampleIndex); 
+        SamplePos.y = StartDrawPos.y + (Sample.x * UnitInPixels); 
+        SampleSize.x = 3; 
+        SampleSize.y = 3; 
+        
+        DrawFilledRect(Buffer, SamplePos, SampleSize, Cyan);
+        
+        SamplePos.x = StartDrawPos.x + (SampleSpacing * SampleIndex); 
+        SamplePos.y = StartDrawPos.y + (Sample.y * UnitInPixels); 
+        SampleSize.x = 3; 
+        SampleSize.y = 3; 
+        
+        DrawFilledRect(Buffer, SamplePos, SampleSize, Yellow);
+        
+        
+        SamplePos.x = StartDrawPos.x + (SampleSpacing * SampleIndex); 
+        SamplePos.y = StartDrawPos.y + (Sample.z * UnitInPixels); 
+        SampleSize.x = 3; 
+        SampleSize.y = 3; 
+        
+        DrawFilledRect(Buffer, SamplePos, SampleSize, Green);
+    }
+    
+    DrawUnFilledRect(Buffer, Pos, Size, 2, Red);
+    
+    return;
+}
+
+
 
 draw_buffer g_DrawBuffer;
 uint32_t g_Running = true;
@@ -486,39 +591,6 @@ void Dismiss(SMElement element)
 }
 
 
-void Print(u8 *String, u32 Length, bitmap *Glyphs, draw_buffer *Buffer)
-{
-    u32 NullBitmapData[4 * 4] = { 0xFFFF0000 };
-    bitmap NullBitmap = { 0 };
-    NullBitmap.Width  = 4;
-    NullBitmap.Height = 4;
-    NullBitmap.Pitch  = NullBitmap.Width * sizeof(NullBitmapData[0]);
-    NullBitmap.Data        = NullBitmapData;
-    NullBitmap.FreedMemory = NullBitmapData;
-    
-    bitmap *UpperAlphaGlyph = Glyphs;
-    bitmap *LowerAlphaGlyph = UpperAlphaGlyph + 26;
-    bitmap *NumericGlyph    = LowerAlphaGlyph + 26;
-    
-    v2s32 Pos = {0 , 0};
-    
-    for(u32 StringIndex = 0; StringIndex < Length; StringIndex++)
-    {
-        u8 Char = String[StringIndex];
-        
-        bitmap *GlyphBitmap = 
-            ((Char >= 'A') && (Char <= 'Z'))? UpperAlphaGlyph + (Char - 'A'):
-        ((Char >= 'a') && (Char <= 'z'))? LowerAlphaGlyph + (Char - 'a'):
-        ((Char >= '0') && (Char <= '9'))? NumericGlyph    + (Char - '0'):
-        &NullBitmap;
-        
-        Pos.x = StringIndex * 67;
-        DrawBitmap(Buffer, GlyphBitmap, Pos);
-    }
-    
-    return;
-}
-
 // NOTE(MIGUEL): Should This code go in the windows platfom layer?? and i just keep abastractions and generics here
 
 typedef struct
@@ -605,7 +677,7 @@ SerialPortTransmitData(serial_device *SerialDevice, u8 *Data, u32 Size)
                            0);
     }
     
-    //ASSERT(Result1);
+    //ASSERT(Result);
     
     return;
 }
@@ -774,65 +846,6 @@ ProcessPendingMessages(void)
     return;
 }
 
-#define PERMANENT_STORAGE_SIZE (MEGABYTES(256))
-#define TRANSIENT_STORAGE_SIZE (GIGABYTES(  1))
-
-struct app_memory
-{
-    size_t PermanentStorageSize;
-    size_t TransientStorageSize;
-    
-    void *PermanentStorage;
-    void *TransientStorage;
-    
-    void   *MainBlock;
-    size_t  MainBlockSize;
-};
-
-
-struct memory_arena
-{
-    size_t  Size;
-    size_t  Used;
-    void   *BasePtr;
-};
-
-void
-MemoryArenaInit(memory_arena *Arena, size_t Size, void *BasePtr)
-{
-    Arena->BasePtr = BasePtr;
-    Arena->Size    = Size;
-    Arena->Used    = 0;
-    
-    return;
-}
-
-#define MEMORY_ARENA_PUSH_STRUCT(Arena,        Type) (Type *)MemoryArenaPushBlock(Arena, sizeof(Type))
-#define MEMORY_ARENA_PUSH_ARRAY( Arena, Count, Type) (Type *)MemoryArenaPushBlock(Arena, (Count) * sizeof(Type))
-#define MEMORY_ARENA_ZERO_STRUCT(Instance          )         MemoryArenaZeroBlock(sizeof(Instance), &(Instance))
-inline void *
-MemoryArenaPushBlock(memory_arena *Arena, size_t Size)
-{
-    ASSERT((Arena->Used + Size) <= Arena->Size);
-    
-    void *NewArenaPartitionAdress  = (u8 *)Arena->BasePtr + Arena->Used;
-    Arena->Used  += Size;
-    
-    return NewArenaPartitionAdress;
-}
-inline void
-MemoryArenaZeroBlock(memory_index size, void *address)
-{
-    u8 *byte = (u8 *)address;
-    
-    while(size--)
-    {
-        *byte++ = 0;
-    }
-    
-    return;
-}
-
 void WinMainCRTStartup()
 {
 	InitPhysics();
@@ -931,12 +944,56 @@ void WinMainCRTStartup()
         SerialPortRecieveData(&Arduino, ShittyBuffer, sizeof(ShittyBuffer));
         
         /// RENDER
-        v4f32 gray = {0.3f, 0.3f, 0.3f, 1.0f};
-        FillBitmap(&g_DrawBuffer, gray);
+        v4f32 gray = {0.15f, 0.15f, 0.15f, 1.0f};
+        FillScreen(&g_DrawBuffer, gray);
         
         Print(ShittyBuffer, sizeof(ShittyBuffer), Glyphs, &g_DrawBuffer);
         Print((u8 *)"acc G", sizeof("acc G"), Glyphs, &g_DrawBuffer);
         
+        v2s32 Pos  = { 400, 600};
+        v2s32 Size = { 600, 400};
+        v4f32 Red  = {1.0f, 0.0f, 0.0f, 1.0f};
+        v4f32 Blue = {0.0f, 0.0f, 1.0f, 1.0f};
+        
+        
+        //rolling_buffer 
+        //rolling_buffer_Push(pf->velocity);
+        
+        static u32   VelocitySampleCount    = 0;
+        static u32   VelocityMaxSampleCount = 256;
+        static v3f32 VelocitySamples[256];
+        static u32   VelocitySampleHead = 0;
+        static u32   VelocitySampleTail = 0;
+        
+        if(VelocitySampleCount < VelocityMaxSampleCount)
+        {
+            VelocitySamples[VelocitySampleCount].x = physics->velocity[0];
+            VelocitySamples[VelocitySampleCount].y = physics->velocity[1];
+            VelocitySamples[VelocitySampleCount].z = physics->velocity[2];
+            VelocitySampleCount++;
+            VelocitySampleTail++;
+        }
+        else
+        {
+            VelocitySampleTail = VelocitySampleTail++ % VelocityMaxSampleCount;
+            
+            VelocitySamples[VelocitySampleTail].x = physics->velocity[0];
+            VelocitySamples[VelocitySampleTail].y = physics->velocity[1];
+            VelocitySamples[VelocitySampleTail].z = physics->velocity[2];
+            VelocitySampleHead = VelocitySampleHead++ % VelocityMaxSampleCount;
+        }
+        
+        
+        s32 KilometersInPixels = 4; 
+        v2s32 RangeX = {0, 100}; // NOTE(MIGUEL): fuck this shit. dont use this yet.
+        v2s32 RangeY = {0, 100};
+        
+        DrawGraph(&g_DrawBuffer,
+                  Glyphs,
+                  Size, Pos,
+                  VelocitySamples, VelocityMaxSampleCount, VelocitySampleHead,
+                  RangeX, RangeY,
+                  10, 4, 2, KilometersInPixels);
         
 #if 0
 		if (KeyStates[0]) // user pressed 1
