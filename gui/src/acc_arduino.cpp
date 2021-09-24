@@ -1,5 +1,5 @@
 // ConsoleApplication1.cpp : Defines the entry point for the console application.
-//
+
 #define WIN32_LEAN_AND_MEAN
 #include "stdafx.h"
 #include <windows.h>
@@ -17,15 +17,114 @@
 #define TERABYTES(size) (GIGABYTES(size) * 1024LL)
 
 
-struct SMElement
+struct button_state
 {
-	HANDLE hMapFile;
-	uint8_t* mapFileBuffer;
+    b32 EndedDown;
+    u32 HalfTransitionCount;
 };
 
-SMElement m_graphics;
-SMElement m_physics;
-SMElement m_static;
+struct app_input
+{
+    button_state ConnectArduino; 
+    button_state SpawnGraph;
+};
+
+
+struct ui_graph
+{
+    v2s32       Pos;
+    v2s32       Size;
+    
+    void       *SampleBuffer;
+    u32         SampleMaxCount;
+    u32         SampleCount;
+    u32         SampleHead;
+    
+    u32         SampleElementCount;
+    u32         SampleStride;
+    
+    rect_v2s32  Range;
+    v2f32       Origin;
+    
+    v2s32       GridResolution;
+    u32         GridLineThickness;
+    
+    u32         UnitInPixels;
+};
+
+
+struct app_state
+{
+    ui_graph   Graphs[128];
+    u32        GraphCount;
+    u32        GraphMaxCount;
+};
+
+void
+UI_PushGraph(app_state *AppState, 
+             v2s32 Size,
+             v2s32 Pos,
+             void  *SampleBuffer,
+             u32    SampleMaxCount,
+             u32    SampleCount,
+             u32    SampleHead,
+             u32    SampleElementCount,
+             u32    SampleStride,
+             s32 RangeMinX,
+             s32 RangeMaxX,
+             s32 RangeMinY,
+             s32 RangeMaxY,
+             u32 GridResolutionX,
+             u32 GridResolutionY,
+             u32 GridLineThickness,
+             u32 UnitInPixels)
+{
+    if(AppState->GraphCount < AppState->GraphMaxCount)
+    {
+        ui_graph *Graph = AppState->Graphs + AppState->GraphCount++;
+        
+        Pos.y -== (u32)(Size.y * 0.5f) * AppState->GraphCount;
+        Graph->Pos  = Pos;
+        
+        
+        Graph->Size = Size;
+        
+        /// BUFFER BINDING
+        Graph->SampleBuffer   = SampleBuffer;
+        Graph->SampleMaxCount = SampleMaxCount;
+        Graph->SampleCount    = SampleCount;
+        Graph->SampleHead     = SampleHead;
+        
+        Graph->SampleElementCount = SampleElementCount;
+        Graph->SampleStride       = SampleStride;
+        
+        Graph->Range.min.x  = RangeMinX;
+        Graph->Range.max.x  = RangeMaxX;
+        Graph->Range.min.y  = RangeMinY;
+        Graph->Range.max.y  = RangeMaxX;
+        
+        Graph->Origin       = {0.5f , 0.5f};
+        
+        Graph->GridResolution.x    = GridResolutionX;
+        Graph->GridResolution.y    = GridResolutionY;
+        Graph->GridLineThickness   = GridLineThickness;
+        
+        Graph->UnitInPixels      = UnitInPixels;
+    }
+    
+    return;
+}
+
+
+struct sm_element
+{
+	HANDLE MappedFile;
+	u8*    FileBuffer;
+};
+
+sm_element g_Graphics;
+sm_element g_Physics;
+sm_element g_Static;
 
 
 struct bitmap
@@ -89,10 +188,11 @@ LoadGlyphBitmap(const char *FileName, const char *FontName, u32 CodePoint)
              0, 0,
              &CheesePoint, 1);
     
-    s32 MinX = 10000;
-    s32 MinY = 10000;
+    s32 MinX =  10000;
+    s32 MinY =  10000;
     s32 MaxX = -10000;
     s32 MaxY = -10000;
+    
     for(s32 Y = 0;
         Y < Height;
         ++Y)
@@ -315,20 +415,9 @@ void Display(draw_buffer *Buffer,
 }
 
 
+
 void
-DrawGraph(draw_buffer *Buffer,
-          bitmap *Glyphs,
-          v2s32 Size,
-          v2s32 Pos,
-          v3f32 *SampleBuffer,
-          u32    SampleCount,
-          u32    SampleHead,
-          v2s32 RangeX,
-          v2s32 RangeY,
-          u32 GridResolutionX,
-          u32 GridResolutionY,
-          u32 GridLineThickness,
-          u32 UnitInPixels)
+DrawGraph(draw_buffer *Buffer, bitmap *Glyphs, ui_graph *Graph)
 {
     /// PALLETTE
     v4f32 Blue   = {0.0f, 0.0f, 1.0f, 1.0f};
@@ -344,32 +433,32 @@ DrawGraph(draw_buffer *Buffer,
     
     v2s32 StartDrawPos =
     {
-        Pos.x - (Size.x / 2),
-        Pos.y
+        Graph->Pos.x - (Graph->Size.x / 2),
+        Graph->Pos.y
     };
     
     /// GRID DRAW
-    u32 GW = (GridResolutionX * GridLineThickness);
-    u32 GH = (GridResolutionY * GridLineThickness);
+    u32 GW = (Graph->GridResolution.x * Graph->GridLineThickness);
+    u32 GH = (Graph->GridResolution.y * Graph->GridLineThickness);
     
-    ASSERT((GridResolutionX * GridLineThickness) <= Size.x);
-    ASSERT((GridResolutionY * GridLineThickness) <= Size.y);
+    ASSERT((Graph->GridResolution.x * Graph->GridLineThickness) <= Graph->Size.x);
+    ASSERT((Graph->GridResolution.y * Graph->GridLineThickness) <= Graph->Size.y);
     
-    u32 NumPixelsForGridSpacingX = Size.x - GW;
-    u32 NumPixelsForGridSpacingY = Size.y - GH;
+    u32 NumPixelsForGridSpacingX = Graph->Size.x - GW;
+    u32 NumPixelsForGridSpacingY = Graph->Size.y - GH;
     
-    u32 GridSpacingX = NumPixelsForGridSpacingX / GridResolutionX;
-    u32 GridSpacingY = NumPixelsForGridSpacingY / GridResolutionY;
+    u32 GridSpacingX = NumPixelsForGridSpacingX / Graph->GridResolution.x;
+    u32 GridSpacingY = NumPixelsForGridSpacingY / Graph->GridResolution.y;
     
     u32 SpaceBudgetX = NumPixelsForGridSpacingX;
     for(u32 GridLineIndex = 0; SpaceBudgetX > 0; SpaceBudgetX -= GridSpacingX, GridLineIndex++)
     {
         v2s32 GridLinePos;
         GridLinePos.x = StartDrawPos.x + ((GridLineIndex + 1) * GridSpacingX); 
-        GridLinePos.y = Pos.y; 
+        GridLinePos.y = Graph->Pos.y; 
         v2s32 GridLineSize;
-        GridLineSize.x = GridLineThickness; 
-        GridLineSize.y = Size.y; 
+        GridLineSize.x = Graph->GridLineThickness; 
+        GridLineSize.y = Graph->Size.y; 
         
         DrawFilledRect(Buffer, GridLinePos, GridLineSize, GridLineGray);
     }
@@ -377,37 +466,37 @@ DrawGraph(draw_buffer *Buffer,
     for(u32 GridLineIndex = 0; SpaceBudgetY > 0; SpaceBudgetY -= GridSpacingY, GridLineIndex++)
     {
         v2s32 GridLinePos;
-        GridLinePos.x = Pos.x; 
+        GridLinePos.x = Graph->Pos.x; 
         GridLinePos.y = StartDrawPos.y + ((GridLineIndex + 1) * GridSpacingY); 
         v2s32 GridLineSize;
-        GridLineSize.x = Size.x; 
-        GridLineSize.y = GridLineThickness; 
+        GridLineSize.x = Graph->Size.x; 
+        GridLineSize.y = Graph->GridLineThickness; 
         
         DrawFilledRect(Buffer, GridLinePos, GridLineSize, GridLineGray);
     }
     
     
-    ASSERT((SampleCount * 2) < Size.x);
-    u32 SampleSpacing = Size.x / SampleCount;
+    ASSERT((Graph->SampleCount * 2) < Graph->Size.x);
+    u32 SampleSpacing = Graph->Size.x / Graph->SampleCount;
     /// SAMPLE DRAW
-    for(u32 SampleIndex = 0; SampleIndex < SampleCount; SampleIndex++)
+    for(u32 SampleIndex = 0; SampleIndex < Graph->SampleCount; SampleIndex++)
     {
-        u32 RollingIndex = (SampleHead + SampleIndex) % SampleCount;
+        u32 RollingIndex = (Graph->SampleHead + SampleIndex) % Graph->SampleCount;
         
-        v3f32 Sample = SampleBuffer[RollingIndex];
+        v3f32 Sample = ((v3f32 *)Graph->SampleBuffer)[RollingIndex];
         
         v2s32 SamplePos;
         v2s32 SampleSize;
         
         SamplePos.x = StartDrawPos.x + (SampleSpacing * SampleIndex); 
-        SamplePos.y = StartDrawPos.y + (Sample.x * UnitInPixels); 
+        SamplePos.y = StartDrawPos.y + (Sample.x * Graph->UnitInPixels); 
         SampleSize.x = 3; 
         SampleSize.y = 3; 
         
         DrawFilledRect(Buffer, SamplePos, SampleSize, Cyan);
         
         SamplePos.x = StartDrawPos.x + (SampleSpacing * SampleIndex); 
-        SamplePos.y = StartDrawPos.y + (Sample.y * UnitInPixels); 
+        SamplePos.y = StartDrawPos.y + (Sample.y * Graph->UnitInPixels); 
         SampleSize.x = 3; 
         SampleSize.y = 3; 
         
@@ -415,18 +504,17 @@ DrawGraph(draw_buffer *Buffer,
         
         
         SamplePos.x = StartDrawPos.x + (SampleSpacing * SampleIndex); 
-        SamplePos.y = StartDrawPos.y + (Sample.z * UnitInPixels); 
+        SamplePos.y = StartDrawPos.y + (Sample.z * Graph->UnitInPixels); 
         SampleSize.x = 3; 
         SampleSize.y = 3; 
         
         DrawFilledRect(Buffer, SamplePos, SampleSize, Green);
     }
     
-    DrawUnFilledRect(Buffer, Pos, Size, 2, Red);
+    DrawUnFilledRect(Buffer, Graph->Pos, Graph->Size, 2, Red);
     
     return;
 }
-
 
 
 draw_buffer g_DrawBuffer;
@@ -501,24 +589,24 @@ static HWND CreateOutputWindow()
 
 void InitPhysics()
 {
-	TCHAR szName[] = TEXT("Local\\acpmf_physics");
+	CHAR ExistingMappedObjectName[] = "Local\\acpmf_physics";
     
-	m_physics.hMapFile = CreateFileMapping(INVALID_HANDLE_VALUE,
-                                           NULL,
-                                           PAGE_READWRITE,
-                                           0,
-                                           sizeof(SPageFilePhysics),
-                                           szName);
-	if (!m_physics.hMapFile)
+	g_Physics.MappedFile = CreateFileMapping(INVALID_HANDLE_VALUE,
+                                             NULL,
+                                             PAGE_READWRITE,
+                                             0,
+                                             sizeof(SPageFilePhysics),
+                                             ExistingMappedObjectName);
+	if (!g_Physics.MappedFile)
 	{
 		MessageBoxA(GetActiveWindow(), "CreateFileMapping failed", "ACCS", MB_OK);
 	}
     
-	m_physics.mapFileBuffer = (unsigned char*)MapViewOfFile(m_physics.hMapFile,
-                                                            FILE_MAP_READ,
-                                                            0, 0,
-                                                            sizeof(SPageFilePhysics));
-	if (!m_physics.mapFileBuffer)
+	g_Physics.FileBuffer = (unsigned char*)MapViewOfFile(g_Physics.MappedFile,
+                                                         FILE_MAP_READ,
+                                                         0, 0,
+                                                         sizeof(SPageFilePhysics));
+	if (!g_Physics.FileBuffer)
 	{
 		MessageBoxA(GetActiveWindow(), "MapViewOfFile failed", "ACCS", MB_OK);
 	}
@@ -528,26 +616,26 @@ void InitPhysics()
 
 void InitGraphics()
 {
-	TCHAR szName[] = TEXT("Local\\acpmf_graphics");
+	CHAR ExistingMappedObjectName[] = "Local\\acpmf_graphics";
 	
-    m_graphics.hMapFile = CreateFileMapping(INVALID_HANDLE_VALUE,
-                                            NULL,
-                                            PAGE_READWRITE,
-                                            0,
-                                            sizeof(SPageFileGraphic),
-                                            szName);
+    g_Graphics.MappedFile = CreateFileMapping(INVALID_HANDLE_VALUE,
+                                              NULL,
+                                              PAGE_READWRITE,
+                                              0,
+                                              sizeof(SPageFileGraphic),
+                                              ExistingMappedObjectName);
     
-	if (!m_graphics.hMapFile)
+	if (!g_Graphics.MappedFile)
 	{
 		MessageBoxA(GetActiveWindow(), "CreateFileMapping failed", "ACCS", MB_OK);
 	}
 	
-    m_graphics.mapFileBuffer = (unsigned char*)MapViewOfFile(m_graphics.hMapFile,
-                                                             FILE_MAP_READ,
-                                                             0, 0,
-                                                             sizeof(SPageFileGraphic));
+    g_Graphics.FileBuffer = (unsigned char*)MapViewOfFile(g_Graphics.MappedFile,
+                                                          FILE_MAP_READ,
+                                                          0, 0,
+                                                          sizeof(SPageFileGraphic));
     
-	if (!m_graphics.mapFileBuffer)
+	if (!g_Graphics.FileBuffer)
 	{
 		MessageBoxA(GetActiveWindow(), "MapViewOfFile failed", "ACCS", MB_OK);
 	}
@@ -557,26 +645,26 @@ void InitGraphics()
 
 void InitStatic()
 {
-	TCHAR szName[] = TEXT("Local\\acpmf_static");
+	CHAR ExistingMappedObjectName[] = "Local\\acpmf_static";
 	
-    m_static.hMapFile = CreateFileMapping(INVALID_HANDLE_VALUE,
-                                          NULL,
-                                          PAGE_READWRITE,
-                                          0,
-                                          sizeof(SPageFileStatic),
-                                          szName);
+    g_Static.MappedFile = CreateFileMappingA(INVALID_HANDLE_VALUE,
+                                             NULL,
+                                             PAGE_READWRITE,
+                                             0,
+                                             sizeof(SPageFileStatic),
+                                             ExistingMappedObjectName);
     
-	if (!m_static.hMapFile)
+	if (!g_Static.MappedFile)
 	{
 		MessageBoxA(GetActiveWindow(), "CreateFileMapping failed", "ACCS", MB_OK);
 	}
     
-	m_static.mapFileBuffer = (unsigned char*)MapViewOfFile(m_static.hMapFile,
-                                                           FILE_MAP_READ,
-                                                           0, 0,
-                                                           sizeof(SPageFileStatic));
+	g_Static.FileBuffer = (unsigned char*)MapViewOfFile(g_Static.MappedFile,
+                                                        FILE_MAP_READ,
+                                                        0, 0,
+                                                        sizeof(SPageFileStatic));
     
-	if (!m_static.mapFileBuffer)
+	if (!g_Static.FileBuffer)
 	{
 		MessageBoxA(GetActiveWindow(), "MapViewOfFile failed", "ACCS", MB_OK);
 	}
@@ -584,10 +672,10 @@ void InitStatic()
     return;
 }
 
-void Dismiss(SMElement element)
+void Dismiss(sm_element element)
 {
-	UnmapViewOfFile(element.mapFileBuffer);
-	CloseHandle(element.hMapFile);
+	UnmapViewOfFile(element.FileBuffer);
+	CloseHandle(element.MappedFile);
 }
 
 
@@ -741,7 +829,20 @@ SerialPortCloseDevice(serial_device *SerialDevice)
 
 
 void
-ProcessPendingMessages(void)
+ProcessKeyboardMessage(button_state *NewState, b32 IsDown)
+{
+    if(NewState->EndedDown != IsDown)
+    {
+        NewState->EndedDown = IsDown;
+        ++NewState->HalfTransitionCount;
+    }
+    
+    return;
+}
+
+
+void
+ProcessPendingMessages(app_input *Input)
 {
     MSG Message = {};
     
@@ -774,57 +875,52 @@ ProcessPendingMessages(void)
                 
                 if(WasDown != IsDown)
                 {
-                    if     (VKCode == 'W')
+                    switch(VKCode)
                     {
-                        //MoveUp
-                    }
-                    else if(VKCode == 'A')
-                    {
-                        //MoveLeft
-                    }
-                    else if(VKCode == 'S')
-                    {
-                        //MoveDown
-                    }
-                    else if(VKCode == 'D')
-                    {
-                        //MoveRight
-                    }
-                    
-                    else if(VKCode == 'Q')
-                    {
-                    }
-                    else if(VKCode == 'E')
-                    {
-                    }
-                    else if(VKCode == VK_UP)
-                    {
-                    }
-                    else if(VKCode == VK_LEFT)
-                    {
-                    }
-                    else if(VKCode == VK_DOWN)
-                    {
-                    }
-                    else if(VKCode == VK_RIGHT)
-                    {
-                    }
-                    else if(VKCode == VK_ESCAPE)
-                    {
-                    }
-                    else if(VKCode == VK_SPACE) 
-                    {
+                        case 'C':
+                        {
+                            ProcessKeyboardMessage(&Input->ConnectArduino, IsDown);
+                        } break;
+                        
+                        case 'E':
+                        {
+                            ProcessKeyboardMessage(&Input->SpawnGraph, IsDown);
+                        } break;
+                        
+                        case VK_UP:
+                        {
+                        } break;
+                        
+                        case VK_LEFT:
+                        {
+                        } break;
+                        
+                        case VK_DOWN:
+                        {
+                        } break;
+                        
+                        case VK_RIGHT:
+                        {
+                        } break;
+                        
+                        case VK_ESCAPE:
+                        {
+                        } break;
+                        
+                        case VK_SPACE: 
+                        {
+                        } break;
                     }
                     
                     if(IsDown)
                     {
                         
-                        uint32_t alt_key_WasDown = ( Message.lParam & (1 << 29));
-                        if((VKCode == VK_F4) && alt_key_WasDown)
+                        u32 AltKeyWasDown = ( Message.lParam & (1 << 29));
+                        if((VKCode == VK_F4) && AltKeyWasDown)
                         {
                             g_Running = false;
                         }
-                        if((VKCode == VK_RETURN) && alt_key_WasDown)
+                        if((VKCode == VK_RETURN) && AltKeyWasDown)
                         {
                             if(Message.hwnd)
                             {
@@ -854,7 +950,8 @@ void WinMainCRTStartup()
     
     HWND Window = CreateOutputWindow();
     
-    app_memory AppMemory = {};
+    app_memory AppMemory = { 0 };
+    
     LPVOID BaseAddress = 0;
     
     AppMemory.PermanentStorageSize = PERMANENT_STORAGE_SIZE;
@@ -875,6 +972,9 @@ void WinMainCRTStartup()
     
     
     memory_arena RenderArena = {};
+    
+    app_state *AppState = (app_state *)AppMemory.PermanentStorage;
+    AppState->GraphMaxCount = 256;
     
     MemoryArenaInit(&RenderArena,
                     AppMemory.TransientStorageSize,
@@ -927,14 +1027,17 @@ void WinMainCRTStartup()
     
     b32 KeyStates[3];
     
+    app_input Input;
+    
+    
 	while (g_Running)
 	{
-        ProcessPendingMessages();
+        ProcessPendingMessages(&Input);
         
         /// INPUT
-        SPageFilePhysics* physics  = (SPageFilePhysics *)m_physics.mapFileBuffer;
-        SPageFileGraphic* graphics = (SPageFileGraphic *)m_graphics.mapFileBuffer;
-        SPageFileStatic*  statics  = (SPageFileStatic  *)m_static.mapFileBuffer;
+        SPageFilePhysics* AssettoPhysics  = (SPageFilePhysics *)g_Physics.FileBuffer;
+        SPageFileGraphic* AssettoGraphics = (SPageFileGraphic *)g_Graphics.FileBuffer;
+        SPageFileStatic*  AssettoStatics  = (SPageFileStatic  *)g_Static.FileBuffer;
         
         KeyStates[0] = GetAsyncKeyState(0x31);
         KeyStates[1] = GetAsyncKeyState(0x32);
@@ -956,9 +1059,6 @@ void WinMainCRTStartup()
         v4f32 Blue = {0.0f, 0.0f, 1.0f, 1.0f};
         
         
-        //rolling_buffer 
-        //rolling_buffer_Push(pf->velocity);
-        
         static u32   VelocitySampleCount    = 0;
         static u32   VelocityMaxSampleCount = 256;
         static v3f32 VelocitySamples[256];
@@ -967,9 +1067,9 @@ void WinMainCRTStartup()
         
         if(VelocitySampleCount < VelocityMaxSampleCount)
         {
-            VelocitySamples[VelocitySampleCount].x = physics->velocity[0];
-            VelocitySamples[VelocitySampleCount].y = physics->velocity[1];
-            VelocitySamples[VelocitySampleCount].z = physics->velocity[2];
+            VelocitySamples[VelocitySampleCount].x = AssettoPhysics->velocity[0];
+            VelocitySamples[VelocitySampleCount].y = AssettoPhysics->velocity[1];
+            VelocitySamples[VelocitySampleCount].z = AssettoPhysics->velocity[2];
             VelocitySampleCount++;
             VelocitySampleTail++;
         }
@@ -977,23 +1077,43 @@ void WinMainCRTStartup()
         {
             VelocitySampleTail = VelocitySampleTail++ % VelocityMaxSampleCount;
             
-            VelocitySamples[VelocitySampleTail].x = physics->velocity[0];
-            VelocitySamples[VelocitySampleTail].y = physics->velocity[1];
-            VelocitySamples[VelocitySampleTail].z = physics->velocity[2];
+            VelocitySamples[VelocitySampleTail].x = AssettoPhysics->velocity[0];
+            VelocitySamples[VelocitySampleTail].y = AssettoPhysics->velocity[1];
+            VelocitySamples[VelocitySampleTail].z = AssettoPhysics->velocity[2];
+            
             VelocitySampleHead = VelocitySampleHead++ % VelocityMaxSampleCount;
         }
         
-        
         s32 KilometersInPixels = 4; 
-        v2s32 RangeX = {0, 100}; // NOTE(MIGUEL): fuck this shit. dont use this yet.
-        v2s32 RangeY = {0, 100};
         
-        DrawGraph(&g_DrawBuffer,
-                  Glyphs,
-                  Size, Pos,
-                  VelocitySamples, VelocityMaxSampleCount, VelocitySampleHead,
-                  RangeX, RangeY,
-                  10, 4, 2, KilometersInPixels);
+        
+        if(Input.SpawnGraph.EndedDown)
+        {
+            // TODO(MIGUEL): create lister of graph sources
+            
+            // TODO(MIGUEL): create a path for the srcs. i think
+            
+            UI_PushGraph(AppState,
+                         Size,
+                         Pos,
+                         VelocitySamples,
+                         VelocityMaxSampleCount,
+                         VelocitySampleCount,
+                         VelocitySampleHead,
+                         3,
+                         3 * sizeof(f32),
+                         0, 100,
+                         0, 100,
+                         10, 4, 2, KilometersInPixels);
+        }
+        
+        ui_graph *Graph = AppState->Graphs;
+        for(u32 GraphIndex = 0;
+            GraphIndex < AppState->GraphCount;
+            GraphIndex++, Graph++)
+        {
+            DrawGraph(&g_DrawBuffer, Glyphs, Graph);
+        }
         
 #if 0
 		if (KeyStates[0]) // user pressed 1
@@ -1085,9 +1205,9 @@ void WinMainCRTStartup()
         Display(&g_DrawBuffer, DeviceContext);
     }
     
-    Dismiss(m_graphics);
-    Dismiss(m_physics);
-    Dismiss(m_static);
+    Dismiss(g_Graphics);
+    Dismiss(g_Physics);
+    Dismiss(g_Static);
     
 }
 

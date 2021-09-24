@@ -3,6 +3,8 @@
 #ifndef ACC_ARDUINO_MATH_H
 #define ACC_ARDUINO_MATH_H
 
+#include "acc_arduino_types.h"
+
 union mat2f32
 {
     f32 e[4];
